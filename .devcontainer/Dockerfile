@@ -1,27 +1,19 @@
-FROM node:22
+FROM mcr.microsoft.com/devcontainers/javascript-node:26-bookworm
 
-# Set default shell to bash
-SHELL ["/bin/bash", "-c"]
+# The game server (leangame). The `main` branch is used because the game uses a Lean release
+# candidate, and leangame only has tags for stable Lean versions. It finds the game as a sibling
+# folder in `/workspaces`, which only root can write to. Docker caches this step: to get a newer
+# `main`, rebuild without cache.
+COPY lean-toolchain /tmp/lean-toolchain
+RUN git clone --depth 1 --branch main https://github.com/leanprover-community/lean4game.git /workspaces/leangame \
+  && chown -R node:node /workspaces/leangame
 
-# ADD ./* GameSkeleton/
+USER node
 
-# install curl, git and nodejs
-RUN apt-get update && \
-    apt-get install -y curl && \
-    apt-get install -y git && \
-    apt-get install -y python3 && \
-    apt-get clean
+# the browser for the tests of the game server is not needed
+RUN cd /workspaces/leangame && CYPRESS_INSTALL_BINARY=0 npm ci && npm cache clean --force
 
-# install lean4game
-#COPY lean-toolchain .
-#COPY npm-install.sh .
-
-#RUN chmod +x npm-install.sh
-#RUN ./npm-install.sh
-
-# install lean
-#COPY lean-install.sh .
-#RUN chmod +x lean-install.sh
-#RUN ./lean-install.sh
-
-#CMD ["bash"]
+# install elan and the Lean toolchain of the game
+RUN curl https://elan.lean-lang.org/elan-init.sh -sSf \
+  | sh -s -- -y --default-toolchain "$(cat /tmp/lean-toolchain)"
+ENV PATH="/home/node/.elan/bin:${PATH}"
